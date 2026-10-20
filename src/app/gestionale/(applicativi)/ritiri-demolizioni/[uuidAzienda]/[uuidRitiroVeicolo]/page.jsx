@@ -1,0 +1,517 @@
+'use client'
+
+import { useParams } from "next/navigation";
+import Image from "next/image";
+import { useState, useEffect, useMemo } from "react";
+import { supabase } from "@/lib/supabaseClient"
+import { FaCar, FaCircle, FaDotCircle, FaUser } from "react-icons/fa";
+import { IoDocumentAttach } from "react-icons/io5";
+import { FaFilePdf } from "react-icons/fa6";
+import { BiCommentAdd } from "react-icons/bi";
+import Link from "next/link";
+import StatusTracking from "../../componenti/statusTracking";
+import ReadTracking from "../../componenti/readTracking";
+import BTNapprovazionePratica from "@/app/gestionale/(applicativi)/ritiri-demolizioni/[uuidAzienda]/[uuidRitiroVeicolo]/componenti/bottoneApprovazionePratica";
+import { useAdmin } from "@/app/admin/components/AdminContext";
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Field, FieldDescription, FieldGroup } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
+import { DataFormat } from "@/app/componenti-sito/dataFormat";
+
+
+  export default function SchedaVeicoli() {
+
+    const utente = useAdmin()
+    const role = utente?.utente?.user_metadata?.ruolo
+    const params = useParams();
+    const uuidRitiroVeicolo = params?.uuidRitiroVeicolo;
+    const [praticaAuto, setPraticaAuto] = useState([])
+    const [updateTracking, setUpdateTracking] = useState(false)
+    const [sUpdateComponent,setSUpdateComponent] = useState(false)
+    const [dialogOpen, setDialogOpen] = useState(false)
+
+    useEffect(() => {
+        if (!params.uuidRitiroVeicolo){
+        return
+        }
+        ;(async () => {
+        const { data: praticheData, error } = await supabase
+            .from("dati_veicolo_ritirato")
+            .select(`
+              *,
+              modello:modello_veicolo (
+                uuid_modello_veicolo,
+                marca,
+                modello
+              ),
+              azienda:azienda_ritiro_veicoli (
+                uuid_azienda_ritiro_veicoli,
+                ragione_sociale_arv,
+                piva_arv
+              ),
+              foto_veicolo:veicolo_ritirato_foto(*),
+              note_ritiro:note_veicolo_ritirato(*),
+              demolizione:certificato_demolizione(*)
+            `)
+            .eq("uuid_veicolo_ritirato", uuidRitiroVeicolo)
+            .order("created_at_veicolo_ritirato", {ascending: false})
+
+        if (error) {
+            console.error(error)
+            toast.error("Errore nel caricamento dati Veicolo")
+            return
+        }
+        setPraticaAuto(praticheData ?? [])
+        })()
+    }, [uuidRitiroVeicolo, sUpdateComponent])  
+
+    const [formData, setFormData] = useState({
+      note_pratica:"",
+    });
+
+    function handleChange(e) {
+      const { name, value } = e.target;
+      setFormData({ ...formData, [name]: value });
+    }
+
+    async function handleSubmit(e) {
+
+      e.preventDefault();
+  
+      if (!praticaAuto[0]?.uuid_veicolo_ritirato) return
+      if (!formData.note_pratica) return
+
+      const payload = {
+        uuid_dati_veicolo_ritirato: praticaAuto[0]?.uuid_veicolo_ritirato,
+        nota: formData.note_pratica?.trim() || null,
+      };
+  
+      const { data, error } = await supabase
+        .from("note_veicolo_ritirato")
+        .insert(payload)
+        .select()
+        .single();
+  
+      if (error) {
+        console.error(error);
+        toast.error(`Errore salvataggio: ${error.message}`);
+        return;
+      }
+
+      setFormData({
+        note_pratica:"",
+      });
+
+      toast.success(`Nota inserita con successo!`);
+      setDialogOpen(false)
+      setSUpdateComponent(prev => !prev)
+
+    }
+
+  return (
+    <div className={`${praticaAuto[0] ? '' : 'hidden'} w-full h-full flex flex-1 flex-col gap-4 p-3`}>
+      <div className="">
+        <h4 className="text-[0.6rem] font-bold text-dark dark:text-neutral-400 border border-neutral-400 px-3 py-2 w-fit rounded-xl">{praticaAuto[0]?.azienda.ragione_sociale_arv} / {praticaAuto[0]?.azienda.piva_arv}</h4>
+      </div>
+      <div className="flex flex-row justify-between border border-brand p-3 w-full rounded-xl items-center text-xs">
+				<div className="flex lg:flex-row flex-col lg:gap-1">
+						<span>STATO ATTUALE:</span>
+						<span className="">
+						{" "}
+						{(() => {
+							if (praticaAuto[0]?.demolizione_approvata == null) return "in attesa"
+							if (praticaAuto[0]?.demolizione_approvata === true) return "approvata"
+							return "rifiutata"
+						})()}
+					</span>
+				</div>
+        <BTNapprovazionePratica uuidPratica={uuidRitiroVeicolo} sUpdateComponent={sUpdateComponent} setSUpdateComponent={setSUpdateComponent}/>
+      </div>
+      <div className="flex flex-col w-full justify-between border rounded-xl p-5 bg-white dark:bg-neutral-900">
+        <div id="maincontainergrid" className="flex lg:flex-row flex-col">
+            {praticaAuto.length ? praticaAuto.map((pa, index) => {
+                function DataFormat(value) {
+                    if (!value) return '—'
+                    const d = new Date(value)
+                    if (isNaN(d)) return '—'
+                    return d.toLocaleString('it-IT', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                    })
+                } 
+              return (
+                <div id="rowContainer" className="flex flex-col gap-2 items-start w-full" key={`${pa.targa_veicolo_ritirato ?? index}`}>
+                  <div className="flex flex-row items-start justify-between w-full">
+                    {pa.pratica_completata ?
+                    <div className="flex flex-row items-center gap-2 border border-neutral-800 px-3 py-2 rounded-xl h-fit text-xs">
+                      <FaCircle className="text-brand"/>
+                      <span>STATO: COMPLETATO</span>
+                    </div> : 
+                    <div className="flex flex-row items-center gap-2 border border-neutral-800 px-3 py-2 rounded-xl h-fit text-xs">
+                      <FaDotCircle className="text-red-700"/>
+                      <span>STATO: IN CORSO</span>
+                    </div>
+                    }
+                    <div className="">
+                      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type="button" variant="ghost" className="text-lg"><BiCommentAdd /></Button>
+                        </DialogTrigger>
+
+                        <DialogContent className="sm:max-w-xl">
+                          <form onSubmit={handleSubmit}>
+                            <DialogHeader>
+                              <DialogTitle>Aggiungi Nota</DialogTitle>
+                              <DialogDescription>
+                                Aggiungi una nota alla pratica
+                              </DialogDescription>
+                            </DialogHeader>
+
+                            <FieldGroup className="py-4">
+                              <Field>
+                                <Label htmlFor="uuid_dati_veicolo_ritirato">Codice Pratica</Label>
+                                <Input id="uuid_dati_veicolo_ritirato" name="uuid_dati_veicolo_ritirato" defaultValue={pa.uuid_veicolo_ritirato} disabled/>
+                              </Field>
+                              <Field>
+                                <Label htmlFor="targa">Targa</Label>
+                                <Input id="targa" name="targa" defaultValue={pa?.targa_veicolo_ritirato} disabled/>
+                              </Field>
+                              <Field>
+                                <Label htmlFor="note">Note</Label>
+                                <Textarea
+                                  id="note_pratica"
+                                  name="note_pratica"
+                                  placeholder="Qui puoi scrivere le note..."
+                                  className="resize-none rounded-2xl bg-white dark:bg-neutral-900 focus:border-brand"
+                                  value={formData.note_pratica}
+                                  onChange={handleChange}
+                                  maxLength={200}
+                                  rows={4}
+                                />
+                              </Field>
+                            </FieldGroup>
+
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button type="button" variant="outline">
+                                  Annulla
+                                </Button>
+                              </DialogClose>
+
+                              <Button type="submit">
+                                Salva modifiche
+                              </Button>
+                            </DialogFooter>
+                          </form>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </div>
+                  <div id="containerOne" className="flex lg:flex-row flex-col gap-1 items-start h-fit">
+                      <div className="flex flex-row gap-1">
+                        <span className="uppercase font-bold">{pa.nome_detentore}</span> <span className="uppercase font-bold">{pa.cognome_detentore}</span>
+                      </div>
+                      <div className="flex flex-row gap-2">
+                        <span>{pa.indirizzo_detentore} - {pa.cap_detentore} {pa.citta_detentore} - {pa.provincia_detentore}</span>
+                      </div>
+                  </div>
+                  <div id="containerTwo" className="flex flex-row items-start h-fit gap-2 text-sm">
+                    <div className="flex flex-row gap-2 border border-brand rounded-lg px-2">
+                      {pa.forma_legale_detentore == "azienda" ? <span> {pa.ragione_sociale_detentore} / P.IVA: {pa.piva_detentore}</span> : <span>Codice Fiscale {pa.cf_detentore} </span>}
+                    </div>
+                  </div>
+                  <div id="containerThree" className="flex lg:flex-row flex-col items-start h-fit gap-2 text-sm">
+                    <div className="flex flex-row gap-2 bg-brand text-neutral-950 rounded-lg px-2">
+                      <span className="font-bold">{pa.targa_veicolo_ritirato}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      <span className="uppercase font-semibold text-brand">{pa.modello.marca} {pa.modello.modello}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      CM³ {pa.cilindrata_veicolo_ritirato}
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      {pa.anno_veicolo_ritirato}
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      KM {pa.km_veicolo_ritirato}
+                    </div>
+                  </div>
+                  <div id="containerFour" className="flex flex-row items-start h-fit gap-2 text-sm">
+                    <div className="flex flex-row gap-2 bg-neutral-200 text-neutral-950 rounded-lg px-2">
+                      <span className="font-bold">{pa.vin_veicolo_ritirato}</span>
+                    </div>
+                  </div>
+                  <div id="containerFive" className="flex lg:flex-row flex-col items-start h-fit gap-2 text-sm">
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Documento Veicolo: <span className="uppercase font-semibold text-brand">{pa.tipologia_documento_veicolo_ritirato}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Documento Detentore: <span className="uppercase font-semibold text-brand">{pa.tipologia_documento_detentore} - {pa.numero_documento_detentore}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Tipologia Detentore: <span className="uppercase font-semibold text-brand">{pa.tipologia_detentore}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Nazionalità: <span className="uppercase font-semibold text-brand">{pa.nazionalita_documento_detentore}</span>
+                    </div>
+                  </div>
+                  <div id="containerSix" className="flex lg:flex-row flex-col items-start h-fit gap-2 text-sm">
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Email: <span className="font-semibold text-brand">{pa.email_detentore}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Mobile: <span className="uppercase font-semibold text-brand">{pa.mobile_detentore}</span>
+                    </div>
+                    <div className="flex flex-row gap-2 border rounded-lg px-2">
+                      Tipologia Detentore: <span className="uppercase font-semibold text-brand">{pa.tipologia_detentore}</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            }) : (
+              <div className="h-24 text-center">Nessun dato disponibile</div>
+            )}
+        </div>
+      </div>
+      {praticaAuto[0]?.note_ritiro?.length > 0 ?
+      <div className="flex flex-col gap-2">
+        <h4 className="text-[0.6rem] font-bold text-dark dark:text-brand border border-brand px-3 py-2 w-fit rounded-xl">NOTE RITIRO</h4>
+          <div className="flex flex-col gap-2">
+          {praticaAuto[0]?.note_ritiro?.map(n => (
+            <div className={`flex flex-col border border-neutral-300 dark:border-neutral-800 rounded-lg p-4 gap-2`} key={n.id}>
+              <div className="flex flex-row items-center justify-between">
+                <p className="text-sm font-medium">{n.nota}</p>
+                {n.attiva && <FaCircle className="text-[0.5rem] text-red-700"/> }
+              </div>
+              <Separator/>
+              <FieldDescription className={`italic text-xs`}>{DataFormat(n.created_at)}</FieldDescription>
+            </div>
+            ))}
+          </div>
+      </div> : null}
+      <div className="">
+        <h4 className="text-[0.6rem] font-bold text-dark dark:text-brand border border-brand px-3 py-2 w-fit rounded-xl">DOCUMENTI</h4>
+      </div>
+      <div className="w-full">
+        <div id="mainImagecontainergridtwo" className="flex flex-row">
+            {praticaAuto?.length ? praticaAuto.map((pa, index) => {
+
+              return (
+                <div id="rowImageContainer" className={`flex flex-col items-start justify-center gap-4 w-full`} key={`${pa.uuid_veicolo_ritirato ?? index}`}>
+                  <div className="flex xl:flex-row flex-col gap-3 items-start border rounded-xl p-4 w-full">
+                    {pa.foto_documento_detentore_f || pa.foto_documento_detentore_r ? 
+                    <div className="flex items-center justify-center border border-brand h-full min-h-8 aspect-square rounded-lg">
+                      <FaUser className=""/>
+                    </div> : null}
+                    {pa?.foto_documento_detentore_f ? 
+                    <Link href={`${pa.foto_documento_detentore_f}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        DOCUMENTO DETENTORE FRONTE
+                      </Button>
+                    </Link> : null
+                    }
+                    {pa?.foto_documento_detentore_r ?
+                    <Link href={`${pa.foto_documento_detentore_r}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        DOCUMENTO DETENTORE RETRO
+                      </Button>
+                    </Link> : null
+                    }
+                  </div>
+                  <div className="flex xl:flex-row flex-col gap-3 items-start border rounded-xl p-4 w-full">
+                    {pa.foto_documento_veicolo_ritirato_f || pa.foto_documento_veicolo_ritirato_r ? 
+                    <div className="flex items-center justify-center border border-brand h-full min-h-8 aspect-square rounded-lg">
+                      <FaCar className=""/>
+                    </div> : null}
+                    {pa?.foto_documento_veicolo_ritirato_f ?
+                    <Link href={`${pa.foto_documento_veicolo_ritirato_f}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        VEICOLO FRONTE
+                      </Button>
+                    </Link> : null
+                    }  
+                    {pa?.foto_documento_veicolo_ritirato_r ?
+                    <Link href={`${pa.foto_documento_veicolo_ritirato_r}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        VEICOLO RETRO
+                      </Button>
+                    </Link> : null
+                    }
+                  </div>
+                  <div className="flex xl:flex-row flex-col gap-3 items-start border rounded-xl p-4 w-full">
+                    {pa.foto_complementare_veicolo_ritirato_f || pa.foto_complementare_veicolo_ritirato_r ? 
+                    <div className="flex items-center justify-center border border-brand h-full min-h-8 aspect-square rounded-lg">
+                      <IoDocumentAttach className=""/>
+                    </div> : null}
+                    {pa?.foto_complementare_veicolo_ritirato_f ?
+                    <Link href={`${pa.foto_complementare_veicolo_ritirato_f}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        COMPLEMENTARE FRONTE
+                      </Button>
+                    </Link> : null
+                    }
+                    {pa?.foto_complementare_veicolo_ritirato_r ?
+                    <Link href={`${pa?.foto_complementare_veicolo_ritirato_r}?download`} target="_blank" className="">
+                      <Button variant="outline" className="hover:bg-brand">
+                        <FaFilePdf/>
+                        COMPLEMENTARE RETRO
+                      </Button>
+                    </Link> : null
+                    }
+                  </div>
+                </div>
+              )
+            }) : (
+              <div className="h-24 text-center">Nessun documento disponibile...</div>
+            )}
+        </div>
+      </div>
+      {praticaAuto[0]?.foto_veicolo.length > 0 ?
+      <div className="flex flex-col gap-4">
+        <div className="">
+          <h4 className="text-[0.6rem] font-bold text-dark dark:text-brand border border-brand px-3 py-2 w-fit rounded-xl">FOTO VEICOLO</h4>
+        </div>
+        <div className="w-full border rounded-xl p-4">
+          <div id="mainImagecontainergridtwo" className="flex flex-row">
+              {praticaAuto?.length ? praticaAuto[0]?.foto_veicolo?.map((fv, index) => {
+
+                return (
+                  <div id="rowImageContainer" className={`flex flex-wrap w-full`} key={fv.id}>
+                    {fv?.foto_anteriore ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv.foto_anteriore} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv.foto_anteriore}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            ANTERIORE
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                    {fv?.foto_laterale_sx ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv?.foto_laterale_sx} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv?.foto_laterale_sx}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            LATERALE SX
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                    {fv?.foto_laterale_dx ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv?.foto_laterale_dx} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv?.foto_laterale_dx}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            LATERALE DX
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                    {fv?.foto_posteriore ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv?.foto_posteriore} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv?.foto_posteriore}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            POSTERIORE
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                    {fv?.foto_aggiuntiva_uno ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv?.foto_aggiuntiva_uno} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv?.foto_aggiuntiva_uno}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            EXTRA 1
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                    {fv?.foto_aggiuntiva_due ? 
+                    <div className="xl:basis-2/12 basis-6/12 p-1 flex flex-row items-start h-fit gap-2 text-sm">
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full h-[200px] overflow-hidden rounded">
+                          <Image src={fv?.foto_aggiuntiva_due} fill alt={`foto_veicolo`} className="object-cover object-center rounded"/>
+                        </div>
+                          <Link href={`${fv?.foto_aggiuntiva_due}?download`} target="_blank" className="flex flex-row items-center justify-center uppercase font-bold bg-brand py-2 px-1 rounded-b-lg">
+                            EXTRA 2
+                          </Link>
+                      </div>
+                    </div> : null
+                    }
+                  </div>
+                )
+              }) : (
+                <div className="h-24 text-center">Nessun documento disponibile...</div>
+              )}
+          </div>
+        </div>
+      </div> : null}
+      <div className="">
+        <h4 className="text-[0.6rem] font-bold text-dark dark:text-brand border border-brand px-3 py-2 w-fit rounded-xl">DEMOLIZIONE</h4>
+      </div>
+      <div className="w-full border rounded-xl p-5">
+        <div id="mainImagecontainergridtwo" className="flex flex-row">
+          {praticaAuto[0]?.demolizione?.length > 0 ? praticaAuto[0].demolizione.map((dem, index) => {
+            return (
+              <div id="rowImageContainer" className="flex flex-col w-full gap-2" key={`${dem.uuid_veicolo_ritirato ?? index}`}>
+                {dem?.documento_demolizione ? 
+                <Link href={`${dem?.documento_demolizione}?download`} target="_blank" className="">
+                  <Button variant="outline" className="hover:bg-brand">
+                    <FaFilePdf/>
+                    DOCUMENTO DEMOLIZIONE
+                  </Button>
+                </Link> : null
+                }
+                {dem?.altro_documento_demolizione ? 
+                <Link href={`${dem?.altro_documento_demolizione}`} target="_blank" className="">
+                  <Button variant="outline" className="hover:bg-brand">
+                    <FaFilePdf/>
+                    RADIAZIONE PRA
+                  </Button>
+                </Link> : null
+                }
+              </div>
+            )
+          }) : (
+            <div className="h-fit text-center">NESSUNA DEMOLIZIONE INSERITA</div>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-row gap-2">
+        <h4 className="text-[0.6rem] font-bold text-dark dark:text-brand border border-brand px-3 py-2 w-fit rounded-xl">TRACKING</h4>
+        <StatusTracking uuidRitiroVeicolo={uuidRitiroVeicolo} setUpdateTracking={setUpdateTracking}/>
+      </div>
+      <div className='p-6 rounded-2xl min-w-0 min-h-0 bg-white dark:bg-neutral-900 border'>
+        <ReadTracking uuidRitiroVeicolo={uuidRitiroVeicolo} updateTracking={updateTracking}/>
+      </div>
+    </div>
+  )
+}
+
+
