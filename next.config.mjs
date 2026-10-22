@@ -14,6 +14,11 @@ const nextConfig = {
         hostname: "ecocarautodemolizione.it",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "ecocar-autodemolizione.vercel.app",
+        pathname: "/**",
+      },
     ],
   },
 };

@@ -1,16 +1,104 @@
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useAdmin } from "@/app/admin/components/AdminContext";
 
-export default function ModificaPratica({ onDisplay }) {
-  const [praticaDemolizione, setPraticaDemolizione] = useState([]);
+const FieldsContext = createContext(null);
 
+  function Field({ name, label, type = "text", showIfEmpty = true }) {
+    const { form, HIDDEN_FIELDS, READONLY_FIELDS, handleChange } = useContext(FieldsContext);
+    const value = form?.[name];
+
+    if (!showIfEmpty) {
+      if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) return null;
+    }
+
+    if (HIDDEN_FIELDS.has(name)) return null;
+
+    const editable = !READONLY_FIELDS.has(name);
+
+    if (type === "checkbox") {
+      return (
+        <label className="flex items-center gap-2 border rounded-md p-2">
+          <input
+            type="checkbox"
+            checked={!!value}
+            disabled={!editable}
+            onChange={(e) => handleChange(name, e.target.checked)}
+          />
+          <span className="text-sm font-medium">{label ?? name}</span>
+        </label>
+      );
+    }
+
+    if (type === "number") {
+      return (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs opacity-70">{label ?? name}</span>
+          <Input
+            type="number"
+            value={value ?? ""}
+            disabled={!editable}
+            onChange={(e) => {
+              const v = e.target.value;
+              handleChange(name, v === "" ? "" : Number(v));
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-xs opacity-70">{label ?? name}</span>
+        <Input
+          value={value ?? ""}
+          disabled={!editable}
+          onChange={(e) => handleChange(name, e.target.value)}
+        />
+      </div>
+    );
+  }
+
+  function SelectField({ name, label, options, showIfEmpty = true }) {
+    const { form, HIDDEN_FIELDS, READONLY_FIELDS, handleChange } = useContext(FieldsContext);
+    const value = form?.[name];
+
+    if (!showIfEmpty) {
+      if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) return null;
+    }
+
+    if (HIDDEN_FIELDS.has(name)) return null;
+
+    const editable = !READONLY_FIELDS.has(name);
+
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-xs opacity-70">{label ?? name}</span>
+        <select
+          className="h-9 rounded-md border px-3 text-sm bg-background"
+          value={value ?? ""}
+          disabled={!editable}
+          onChange={(e) => handleChange(name, e.target.value)}
+        >
+          <option value="">—</option>
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+export default function ModificaPratica({ onDisplay }) {
+
+  const [praticaDemolizione, setPraticaDemolizione] = useState([]);
   const [dataSearch, setDataSearch] = useState("");
   const [dataSearchSubmit, setDataSearchSubmit] = useState("");
-
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
@@ -18,7 +106,6 @@ export default function ModificaPratica({ onDisplay }) {
 	const utente = useAdmin();
 	const role = utente?.utente?.user_metadata?.ruolo;
 	const isAdmin = role === "admin" || role === "superadmin";
-
 
   const HIDDEN_FIELDS = useMemo(
     () =>
@@ -97,7 +184,6 @@ export default function ModificaPratica({ onDisplay }) {
 
   const [modelli, setModelli] = useState([]);
   const [loadingModelli, setLoadingModelli] = useState(false);
-
   const [brandSearch, setBrandSearch] = useState("");
   const [selectedMarca, setSelectedMarca] = useState("");
   const [selectedModelUuid, setSelectedModelUuid] = useState("");
@@ -407,94 +493,11 @@ export default function ModificaPratica({ onDisplay }) {
     );
   }
 
-  function Field({ name, label, type = "text", showIfEmpty = true }) {
-    const value = form?.[name];
 
-    if (!showIfEmpty) {
-      if (isEmptyValue(value)) return null;
-    }
-
-    if (HIDDEN_FIELDS.has(name)) return null;
-
-    const editable = !READONLY_FIELDS.has(name);
-
-    if (type === "checkbox") {
-      return (
-        <label className="flex items-center gap-2 border rounded-md p-2">
-          <input
-            type="checkbox"
-            checked={!!value}
-            disabled={!editable}
-            onChange={(e) => handleChange(name, e.target.checked)}
-          />
-          <span className="text-sm font-medium">{label ?? name}</span>
-        </label>
-      );
-    }
-
-    if (type === "number") {
-      return (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs opacity-70">{label ?? name}</span>
-          <Input
-            type="number"
-            value={value ?? ""}
-            disabled={!editable}
-            onChange={(e) => {
-              const v = e.target.value;
-              handleChange(name, v === "" ? "" : Number(v));
-            }}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col gap-1">
-        <span className="text-xs opacity-70">{label ?? name}</span>
-        <Input
-          value={value ?? ""}
-          disabled={!editable}
-          onChange={(e) => handleChange(name, e.target.value)}
-        />
-      </div>
-    );
-  }
-
-  function SelectField({ name, label, options, showIfEmpty = true }) {
-    const value = form?.[name];
-
-    if (!showIfEmpty) {
-      if (isEmptyValue(value)) return null;
-    }
-
-    if (HIDDEN_FIELDS.has(name)) return null;
-
-    const editable = !READONLY_FIELDS.has(name);
-
-    return (
-      <div className="flex flex-col gap-1">
-        <span className="text-xs opacity-70">{label ?? name}</span>
-        <select
-          className="h-9 rounded-md border px-3 text-sm bg-background"
-          value={value ?? ""}
-          disabled={!editable}
-          onChange={(e) => handleChange(name, e.target.value)}
-        >
-          <option value="">—</option>
-          {options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-
-	if (!isAdmin) return
+	if (!isAdmin) return null;
 
   return (
+    <FieldsContext.Provider value={{ form, HIDDEN_FIELDS, READONLY_FIELDS, handleChange }}>
     <div className={`${onDisplay ? "" : "hidden"} w-full flex flex-col gap-3 px-4`}>
       <div>
         <h4 className="text-[0.6rem] font-bold border border-brand px-3 py-2 w-fit rounded-xl">
@@ -697,5 +700,6 @@ export default function ModificaPratica({ onDisplay }) {
         </div>
       ) : null}
     </div>
+    </FieldsContext.Provider>
   );
 }

@@ -225,7 +225,7 @@ export default function Home() {
                 <div className="grid gap-3">
                   <div>
                     <p className="text-muted-foreground">Cellulare Rottamazione</p>
-                    <a className="font-medium hover:underline text-neutral-600" href="tel:+39375858112">
+                    <a className="font-medium hover:underline text-neutral-600" href="tel:+393758581112">
                       375 858 1112 
                     </a>
                   </div>
